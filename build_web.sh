@@ -44,7 +44,7 @@ rm -f "docs/${CRATE_NAME_SNAKE_CASE}_bg.wasm"
 
 echo "Building rust…"
 BUILD=release
-cargo build -p "${CRATE_NAME}" --release --lib --target wasm32-unknown-unknown
+cargo build -p "color-wave" --release --lib --target wasm32-unknown-unknown
 
 # Get the output directory (in the workspace it is in another location)
 TARGET=$(cargo metadata --format-version=1 | jq --raw-output .target_directory)
