@@ -7,7 +7,7 @@ use rand::{
     distributions::{Distribution, Standard},
     Rng,
 };
-use wassily::prelude::*;
+use wassily::prelude::{*, palette::{Hsluv, FromColor}};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
@@ -15,100 +15,89 @@ use wassily::prelude::*;
 
 fn wave(color_wave: &ColorWaveApp) -> ColorImage {
     let mut canvas = Canvas::new(720, 300);
-    let mut coscol = CosColor::default();
-    coscol.r.a = color_wave.red_a;
-    coscol.r.b = color_wave.red_b;
-    coscol.r.freq = color_wave.red_freq;
-    coscol.r.phase = color_wave.red_phase * TAU;
-    coscol.g.a = color_wave.green_a;
-    coscol.g.b = color_wave.green_b;
-    coscol.g.freq = color_wave.green_freq;
-    coscol.g.phase = color_wave.green_phase * TAU;
-    coscol.b.a = color_wave.blue_a;
-    coscol.b.b = color_wave.blue_b;
-    coscol.b.freq = color_wave.blue_freq;
-    coscol.b.phase = color_wave.blue_phase * TAU;
+    let mut proc_color = ProcColor::default();
+    proc_color.scale = color_wave.scale;
+    proc_color.seed = color_wave.seed;
+    proc_color.c2.a = color_wave.channel2_a;
+    proc_color.c2.b = color_wave.channel2_b;
+    proc_color.c2.freq = color_wave.channel2_freq;
+    proc_color.c3.a = color_wave.channel3_a;
+    proc_color.c3.b = color_wave.channel3_b;
+    proc_color.c3.freq = color_wave.channel3_freq;
     for i in 0..360 {
-        let c = coscol.cos_color(i as f32 / 180.0 * PI);
+        let c = proc_color.proc_color(i as f32 / 180.0 * PI);
+        let c_hsluv = Hsluv::new(c.0 * 360.0, c.1 * 100.0, c.2 * 100.0);
+        let rgba = palette::Srgba::from_color(c_hsluv);
+        let colr = Color::from_srgba(rgba);
         ShapeBuilder::new()
-            .line(pt(2.0 * i as f32, 0), pt(2.0 * i as f32, canvas.h_f32()))
+            .line(pt(2.0 * i as f32, 0), pt(2.0 * i as f32, canvas.h_f32() / 2.0))
             .stroke_weight(2.0)
-            .stroke_color(c)
+            .stroke_color(colr)
             .build()
             .draw(&mut canvas);
-    }
-    let mut buffer: Vec<Color32> = vec![];
-    for p in canvas.pixels() {
-        buffer.push(Color32::from_rgba_unmultiplied(
-            p.red(),
-            p.green(),
-            p.blue(),
-            p.alpha(),
-        ));
+        let rgb = okhsl_to_srgb(c.0, c.1, c.2);
+        let colr = Color::from_rgba(rgb.0, rgb.1, rgb.2, 1.0).unwrap();
+        ShapeBuilder::new()
+            .line(pt(2.0 * i as f32, canvas.h_f32() / 2.0), pt(2.0 * i as f32, canvas.h_f32()))
+            .stroke_weight(2.0)
+            .stroke_color(colr)
+            .build()
+            .draw(&mut canvas);
     }
     ColorImage::from_rgba_unmultiplied([canvas.w_usize(), canvas.h_usize()], canvas.data())
 }
 pub struct ColorWaveApp {
-    red_a: f32,
-    red_b: f32,
-    red_freq: f32,
-    red_phase: f32,
-    green_a: f32,
-    green_b: f32,
-    green_freq: f32,
-    green_phase: f32,
-    blue_a: f32,
-    blue_b: f32,
-    blue_freq: f32,
-    blue_phase: f32,
+    scale: f32,
+    seed: f32,
+    channel2_a: f32,
+    channel2_b: f32,
+    channel2_freq: f32,
+    channel3_a: f32,
+    channel3_b: f32,
+    channel3_freq: f32,
 }
 
 impl Default for ColorWaveApp {
     fn default() -> Self {
         Self {
-            red_a: 0.5,
-            red_b: 0.5,
-            red_freq: 1.0,
-            red_phase: 0.0,
-            green_a: 0.5,
-            green_b: 0.5,
-            green_freq: 1.0,
-            green_phase: 0.1,
-            blue_a: 0.5,
-            blue_b: 0.5,
-            blue_freq: 1.0,
-            blue_phase: 0.2,
+            scale: 0.2,
+            seed: 0.0,
+            channel2_a: 0.5,
+            channel2_b: 0.5,
+            channel2_freq: 1.0,
+            channel3_a: 0.5,
+            channel3_b: 0.35,
+            channel3_freq: 1.0,
         }
     }
 }
 
+fn normal_approx<R: Rng + ?Sized>(rng: &mut R, min: f32, max: f32) -> f32 {
+    let s: [f32; 8] = rng.gen();
+    min + s.into_iter().sum::<f32>() * (max - min) * 0.125
+}
+
 impl Distribution<ColorWaveApp> for Standard {
     fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> ColorWaveApp {
-        let red_a = rng.gen_range(0.25..=0.75);
-        let red_b = 1.0 - red_a;
-        let red_freq = rng.gen_range(0.5..=2.0);
-        let red_phase = rng.gen_range(0.0..=0.5);
-        let green_a = rng.gen_range(0.25..=0.75);
-        let green_b = 1.0 - green_a;
-        let green_freq = rng.gen_range(0.5..=2.0);
-        let green_phase = rng.gen_range(0.0..=0.5);
-        let blue_a = rng.gen_range(0.25..0.75);
-        let blue_b = 1.0 - blue_a;
-        let blue_freq = rng.gen_range(0.5..=2.0);
-        let blue_phase = rng.gen_range(0.0..=0.5);
+        let scale = rng.gen_range(0.0..1.0);
+        let seed = rng.gen_range(0.0..10.0);
+        let channel2_a: f32 = normal_approx(rng, 0.0, 1.0);
+        let a2 = channel2_a.min(1.0 - channel2_a);
+        let channel2_b = normal_approx(rng, a2 / 2.0, a2);
+        let channel2_freq = normal_approx(rng, 0.0, 5.0);
+        let channel3_a: f32 = normal_approx(rng, 0.0, 1.0);
+        let a3 = channel3_a.min(1.0 - channel3_a);
+        let channel3_b = normal_approx(rng, 0.0, a3);
+        let channel3_freq = normal_approx(rng, 0.0, 5.0);
         ColorWaveApp {
-            red_a,
-            red_b,
-            red_freq,
-            red_phase,
-            green_a,
-            green_b,
-            green_freq,
-            green_phase,
-            blue_a,
-            blue_b,
-            blue_freq,
-            blue_phase,
+            scale,
+            seed,
+            channel2_a,
+            channel2_b,
+            channel2_freq,
+            channel3_a,
+            channel3_b,
+            channel3_freq,
         }
     }
 }
@@ -142,22 +131,18 @@ impl epi::App for ColorWaveApp {
 
     fn update(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
         let Self {
-            red_a,
-            red_b,
-            red_freq,
-            red_phase,
-            green_a,
-            green_b,
-            green_freq,
-            green_phase,
-            blue_a,
-            blue_b,
-            blue_freq,
-            blue_phase,
+            scale,
+            seed,
+            channel2_a,
+            channel2_b,
+            channel2_freq,
+            channel3_a,
+            channel3_b,
+            channel3_freq,
         } = self;
         frame.set_window_size(eframe::epaint::Vec2 {
             x: 1000.0,
-            y: 480.0,
+            y: 420.0,
         });
 
         // egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
@@ -178,56 +163,44 @@ impl epi::App for ColorWaveApp {
                 ui.add_space(10.0);
                 ui.heading("Controls");
                 ui.add_space(20.0);
-                ui.label(egui::RichText::new("Red").color(Color32::RED));
-                ui.add(egui::Slider::new(red_a, 0.0..=1.0).text("a"));
-                ui.add(egui::Slider::new(red_b, 0.0..=1.0).text("b"));
-                ui.add(egui::Slider::new(red_freq, 0.0..=2.0).text("frequency"));
-                ui.add(egui::Slider::new(red_phase, 0.0..=1.0).text("phase"));
+                ui.label(egui::RichText::new("Channel 1").color(Color32::LIGHT_BLUE));
+                ui.add(egui::Slider::new(scale, 0.0..=1.0).text("colors"));
+                ui.add(egui::Slider::new(seed, 0.0..=10.0).step_by(0.001).text("seed"));
                 ui.add_space(20.0);
-                ui.label(egui::RichText::new("Green").color(Color32::GREEN));
-                ui.add(egui::Slider::new(green_a, 0.0..=1.0).text("a"));
-                ui.add(egui::Slider::new(green_b, 0.0..=1.0).text("b"));
-                ui.add(egui::Slider::new(green_freq, 0.0..=2.0).text("frequency"));
-                ui.add(egui::Slider::new(green_phase, 0.0..=1.0).text("phase"));
+                ui.label(egui::RichText::new("Channel 2").color(Color32::LIGHT_BLUE));
+                ui.add(egui::Slider::new(channel2_a, 0.0..=1.0).text("a"));
+                ui.add(egui::Slider::new(channel2_b, 0.0..=1.0).text("b"));
+                ui.add(egui::Slider::new(channel2_freq, 0.0..=10.0).text("frequency"));
                 ui.add_space(20.0);
-                ui.label(egui::RichText::new("Blue").color(Color32::LIGHT_BLUE));
-                ui.add(egui::Slider::new(blue_a, 0.0..=1.0).text("a"));
-                ui.add(egui::Slider::new(blue_b, 0.0..=1.0).text("b"));
-                ui.add(egui::Slider::new(blue_freq, 0.0..=2.0).text("frequency"));
-                ui.add(egui::Slider::new(blue_phase, 0.0..=1.0).text("phase"));
+                ui.label(egui::RichText::new("Channel 3").color(Color32::LIGHT_BLUE));
+                ui.add(egui::Slider::new(channel3_a, 0.0..=1.0).text("a"));
+                ui.add(egui::Slider::new(channel3_b, 0.0..=1.0).text("b"));
+                ui.add(egui::Slider::new(channel3_freq, 0.0..=10.0).text("frequency"));
                 ui.add_space(20.0);
                 ui.horizontal(|ui| {
                     ui.add_space(20.0);
                     if ui.button("Reset").clicked() {
-                        *red_a = 0.5;
-                        *red_b = 0.5;
-                        *red_freq = 1.0;
-                        *red_phase = 0.0;
-                        *green_a = 0.5;
-                        *green_b = 0.5;
-                        *green_freq = 1.0;
-                        *green_phase = 0.1;
-                        *blue_a = 0.5;
-                        *blue_b = 0.5;
-                        *blue_freq = 1.0;
-                        *blue_phase = 0.2;
+                        *scale = 0.2;
+                        *seed = 0.0;
+                        *channel2_a = 0.5;
+                        *channel2_b = 0.5;
+                        *channel2_freq = 1.0;
+                        *channel3_a = 0.5;
+                        *channel3_b = 0.35;
+                        *channel3_freq = 1.0;
                     }
                     ui.add_space(20.0);
                     if ui.button("Random").clicked() {
                         let mut rng = rand::thread_rng();
                         let vals: ColorWaveApp = rng.gen();
-                        *red_a = vals.red_a;
-                        *red_b = vals.red_b;
-                        *red_freq = vals.red_freq;
-                        *red_phase = vals.red_phase;
-                        *green_a = vals.green_a;
-                        *green_b = vals.green_b;
-                        *green_freq = vals.green_freq;
-                        *green_phase = vals.green_phase;
-                        *blue_a = vals.blue_a;
-                        *blue_b = vals.blue_b;
-                        *blue_freq = vals.blue_freq;
-                        *blue_phase = vals.blue_phase;
+                        *scale = vals.scale;
+                        *seed = vals.seed;
+                        *channel2_a = vals.channel2_a;
+                        *channel2_b = vals.channel2_b;
+                        *channel2_freq = vals.channel2_freq;
+                        *channel3_a = vals.channel3_a;
+                        *channel3_b = vals.channel3_b;
+                        *channel3_freq = vals.channel3_freq;
                     }
                 });
             });
