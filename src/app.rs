@@ -7,7 +7,10 @@ use rand::{
     distributions::{Distribution, Standard},
     Rng,
 };
-use wassily::prelude::{*, palette::{Hsluv, FromColor}};
+use wassily::prelude::{
+    palette::{FromColor, Hsluv},
+    *,
+};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
@@ -30,7 +33,10 @@ fn wave(color_wave: &ColorWaveApp) -> ColorImage {
         let rgba = palette::Srgba::from_color(c_hsluv);
         let colr = Color::from_srgba(rgba);
         ShapeBuilder::new()
-            .line(pt(2.0 * i as f32, 0), pt(2.0 * i as f32, canvas.h_f32() / 2.0))
+            .line(
+                pt(2.0 * i as f32, 0),
+                pt(2.0 * i as f32, canvas.h_f32() / 2.0),
+            )
             .stroke_weight(2.0)
             .stroke_color(colr)
             .build()
@@ -38,12 +44,23 @@ fn wave(color_wave: &ColorWaveApp) -> ColorImage {
         let rgb = okhsl_to_srgb(c.0, c.1, c.2);
         let colr = Color::from_rgba(rgb.0, rgb.1, rgb.2, 1.0).unwrap();
         ShapeBuilder::new()
-            .line(pt(2.0 * i as f32, canvas.h_f32() / 2.0), pt(2.0 * i as f32, canvas.h_f32()))
+            .line(
+                pt(2.0 * i as f32, canvas.h_f32() / 2.0),
+                pt(2.0 * i as f32, canvas.h_f32()),
+            )
             .stroke_weight(2.0)
             .stroke_color(colr)
             .build()
             .draw(&mut canvas);
     }
+    ShapeBuilder::new()
+        .line(
+            pt(0, canvas.h_f32() / 2.0),
+            pt(canvas.w_f32(), canvas.h_f32() / 2.0),
+        )
+        .stroke_weight(2.0)
+        .build()
+        .draw(&mut canvas);
     ColorImage::from_rgba_unmultiplied([canvas.w_usize(), canvas.h_usize()], canvas.data())
 }
 pub struct ColorWaveApp {
@@ -145,17 +162,6 @@ impl epi::App for ColorWaveApp {
             y: 420.0,
         });
 
-        // egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-        //     // The top panel is often a good place for a menu bar:
-        //     egui::menu::bar(ui, |ui| {
-        //         ui.menu_button("File", |ui| {
-        //             if ui.button("Quit").clicked() {
-        //                 frame.quit();
-        //             }
-        //         });
-        //     });
-        // });
-
         egui::SidePanel::left("side_panel")
             .resizable(false)
             .min_width(250.0)
@@ -163,16 +169,20 @@ impl epi::App for ColorWaveApp {
                 ui.add_space(10.0);
                 ui.heading("Controls");
                 ui.add_space(20.0);
-                ui.label(egui::RichText::new("Channel 1").color(Color32::LIGHT_BLUE));
+                ui.label(egui::RichText::new("Hue").color(Color32::LIGHT_BLUE));
                 ui.add(egui::Slider::new(scale, 0.0..=1.0).text("colors"));
-                ui.add(egui::Slider::new(seed, 0.0..=10.0).step_by(0.001).text("seed"));
+                ui.add(
+                    egui::Slider::new(seed, 0.0..=10.0)
+                        .step_by(0.001)
+                        .text("seed"),
+                );
                 ui.add_space(20.0);
-                ui.label(egui::RichText::new("Channel 2").color(Color32::LIGHT_BLUE));
+                ui.label(egui::RichText::new("Saturation").color(Color32::LIGHT_BLUE));
                 ui.add(egui::Slider::new(channel2_a, 0.0..=1.0).text("a"));
                 ui.add(egui::Slider::new(channel2_b, 0.0..=1.0).text("b"));
                 ui.add(egui::Slider::new(channel2_freq, 0.0..=10.0).text("frequency"));
                 ui.add_space(20.0);
-                ui.label(egui::RichText::new("Channel 3").color(Color32::LIGHT_BLUE));
+                ui.label(egui::RichText::new("Lightness").color(Color32::LIGHT_BLUE));
                 ui.add(egui::Slider::new(channel3_a, 0.0..=1.0).text("a"));
                 ui.add(egui::Slider::new(channel3_b, 0.0..=1.0).text("b"));
                 ui.add(egui::Slider::new(channel3_freq, 0.0..=10.0).text("frequency"));
@@ -208,7 +218,7 @@ impl epi::App for ColorWaveApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             // The central panel the region left after adding TopPanel's and SidePanel's
             ui.add_space(10.0);
-            ui.heading("Color Palette");
+            ui.heading("Color Palette - (HSLuv, Okhsl)");
             ui.add_space(40.0);
             egui::warn_if_debug_build(ui);
 
